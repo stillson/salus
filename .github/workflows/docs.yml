@@ -12,7 +12,7 @@ env:
   CARGO_TERM_COLOR: always
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -34,10 +34,14 @@ jobs:
       run: make doc
     - name: Setup Pages
       uses: actions/configure-pages@v2
+    - name: Dump flattened GitHub contexts
+      uses: vbem/flatten-contexts@v1
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v1
       with:
         path: 'target/riscv64gc-unknown-none-elf/doc'
+    - name: Dump flattened GitHub contexts
+      uses: vbem/flatten-contexts@v1
     - name: Deploy to GitHub Pages
       id: deployment
       uses: actions/deploy-pages@v1
