@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 # tatds`
 set -e
 trap EXIT
