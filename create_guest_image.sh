@@ -1,5 +1,5 @@
-#!/bin/bash 
-# tatds`
+#!/bin/bash -x
+# tat
 set -e
 trap EXIT
 # This is 32 4K pages
