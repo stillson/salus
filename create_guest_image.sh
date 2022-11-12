@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 trap EXIT
 # This is 32 4K pages
