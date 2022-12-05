@@ -1,3 +1,5 @@
+TEST
+
 A micro hypervisor for RISC-V systems.
 
 # Quick Start
