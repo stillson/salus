@@ -68,6 +68,21 @@ impl PageSize {
         val & !(*self as u64 - 1)
     }
 
+    /// Return the number of bits to shift to get one page.
+    /// i.e. 4096 == 2^12 == 1 << 12
+    pub fn page_shift(&self) -> u64 {
+        match self {
+            PageSize::Size4k => 12,
+            PageSize::Size2M => 21,
+            PageSize::Size1G => 30,
+            PageSize::Size512G => 39,
+        }
+    }
+    /// Return the number of pages of this `PageSize` that will fit in `val`.
+    /// This rounds down the number of pages, unlike num_4k_pages() which rounds up.
+    pub fn num_pages_contained_in(&self, val: u64) -> u64 {
+        val >> self.page_shift()
+    }
     /// Returns if the size is a huge page (> 4kB) size.
     pub fn is_huge(&self) -> bool {
         !matches!(*self, PageSize::Size4k)

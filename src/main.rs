@@ -201,10 +201,18 @@ fn pte_page_count(mem_map: &HwMemMap) -> u64 {
 
 // Returns the base address of the first available region in the memory map that is at least `size`
 // bytes long. Returns None if no region is big enough.
-fn find_available_region(mem_map: &HwMemMap, size: u64) -> Option<SupervisorPageAddr> {
+fn find_available_region(
+    mem_map: &HwMemMap,
+    size: u64,
+    page_size: PageSize,
+) -> Option<SupervisorPageAddr> {
     mem_map
         .regions()
-        .find(|r| r.region_type() == HwMemRegionType::Available && r.size() >= size)
+        .find(|r| {
+            r.region_type() == HwMemRegionType::Available
+                // after this is rounded to page size, will it still be big enough
+                && r.base().bits() + r.size() - page_size.round_up(r.base().bits()) >= size
+        })
         .map(|r| r.base())
 }
 
@@ -268,8 +276,12 @@ fn hyp_map_region(
 // map.
 fn setup_hyp_paging(mem_map: &mut HwMemMap) {
     let num_pte_pages = pte_page_count(mem_map);
-    let pte_base = find_available_region(mem_map, num_pte_pages * PageSize::Size4k as u64)
-        .expect("Not enough free memory for hypervisor Sv48 page table");
+    let pte_base = find_available_region(
+        mem_map,
+        num_pte_pages * PageSize::Size4k as u64,
+        PageSize::Size4k,
+    )
+    .expect("Not enough free memory for hypervisor Sv48 page table");
     let mut pte_pages = mem_map
         .reserve_and_take_pages(
             HwReservedMemType::HypervisorPtes,
@@ -301,9 +313,9 @@ fn setup_hyp_paging(mem_map: &mut HwMemMap) {
 
 /// Creates a heap from the given `mem_map`, marking the region occupied by the heap as reserved.
 fn create_heap(mem_map: &mut HwMemMap) {
-    const HEAP_SIZE: u64 = 16 * 1024 * 1024;
-
-    let heap_base = find_available_region(mem_map, HEAP_SIZE)
+    const PAGE_SIZE: PageSize = PageSize::Size2M;
+    const HEAP_SIZE: u64 = 8 * PAGE_SIZE as u64;
+    let heap_base = find_available_region(mem_map, HEAP_SIZE, PAGE_SIZE)
         .expect("Not enough free memory for hypervisor heap");
     mem_map
         .reserve_region(
@@ -312,14 +324,12 @@ fn create_heap(mem_map: &mut HwMemMap) {
             HEAP_SIZE,
         )
         .unwrap();
+
+    let heap_base = PageAddr::with_round_up(RawAddr::from(heap_base), PAGE_SIZE);
+
     let pages: SequentialPages<InternalDirty> = unsafe {
         // Safe since this region of memory was free in the memory map.
-        SequentialPages::from_mem_range(
-            heap_base,
-            PageSize::Size4k,
-            HEAP_SIZE / PageSize::Size4k as u64,
-        )
-        .unwrap()
+        SequentialPages::from_mem_range(heap_base, PAGE_SIZE, HEAP_SIZE / PAGE_SIZE as u64).unwrap()
     };
     HYPERVISOR_ALLOCATOR.call_once(|| HypAlloc::from_pages(pages.clean()));
 }
