@@ -225,14 +225,21 @@ fn test_attestation() -> TestResult {
     }
 
     let request_data = [0u8; sbi_rs::EVIDENCE_DATA_BLOB_SIZE];
+
+    TEST_CSR.chunks(16).for_each(|r| {
+        r.iter().for_each(|b| print!("{b:02x} "));
+        println!()
+    });
+
+    println!("TC: {:?}  rd:{:?}",TEST_CSR.as_ptr(), request_data.as_ptr());
+
     let cert_bytes = match attestation::get_evidence(
         TEST_CSR,
         &request_data,
         sbi_rs::EvidenceFormat::DiceTcbInfo,
     ) {
         Err(e) => {
-            println!("Attestation error {e:?}");
-            println!("Guest evidence call failed");
+            println!("--Guest evidence call failed; Attestation error : {e:?}");
             return Err(TestFailure::Fail);
         }
         Ok(cert_bytes) => cert_bytes,
@@ -244,6 +251,11 @@ fn test_attestation() -> TestResult {
         cert_bytes.len()
     );
 
+    cert_bytes.as_slice().chunks(16).for_each(|r| {
+        r.iter().for_each(|b| print!("{b:02x} "));
+        println!()
+    });
+    
     let mut tcb_info_extn = DiceTcbInfo::default();
     let cert = Certificate::from_der(cert_bytes.as_slice()).expect("Cert parsing error");
 
@@ -472,10 +484,21 @@ extern "C" fn kernel_init(hart_id: u64, boot_args: u64) {
     }
 
     let mut next_page = USABLE_RAM_START_ADDRESS + NUM_GUEST_DATA_PAGES * PAGE_SIZE_4K;
-    test_runtest!("test attestation", { test_attestation() });
+
     // Touch the rest of the data pages to force Tellus to fault them in.
-    let end =
-        USABLE_RAM_START_ADDRESS + (NUM_GUEST_DATA_PAGES + NUM_GUEST_ZERO_PAGES) * PAGE_SIZE_4K;
+
+
+
+    let mut next_page = USABLE_RAM_START_ADDRESS + NUM_GUEST_DATA_PAGES * PAGE_SIZE_4K;
+
+    let x = NUM_GUEST_ZERO_PAGES * PAGE_SIZE_4K;
+    //let x = 0;
+
+    let end = next_page + x;
+
+    test_runtest!("test attestation", { test_attestation() });
+
+
     while next_page < end {
         let ptr = (next_page + 2 * core::mem::size_of::<u64>() as u64) as *mut u64;
         // Safety: next_page is properly aligned and should be a writable part of our address space.
@@ -488,6 +511,8 @@ extern "C" fn kernel_init(hart_id: u64, boot_args: u64) {
     }
 
     test_runtest!("Test memory sharing", { test_memory_sharing() });
+
+    //test_runtest!("test attestation", { test_attestation() });
 
     if vectors_enabled {
         test_runtest!("test vectors", { test_vector() });

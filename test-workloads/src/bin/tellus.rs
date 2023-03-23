@@ -43,6 +43,11 @@ extern "C" {
     fn _secondary_start();
 }
 
+extern "C" {
+    static _guestvm_bin: u8;
+    static _guestvm_bin_len: u8;
+}
+
 // Dummy global allocator - panic if anything tries to do an allocation.
 struct GeneralGlobalAlloc;
 
@@ -622,14 +627,15 @@ extern "C" fn kernel_init(hart_id: u64, fdt_addr: u64) {
         println!("Platform doesn't support COVE AIA extension");
     }
 
-    let guest_image_base = USABLE_RAM_START_ADDRESS + PAGE_SIZE_4K * NUM_TELLUS_IMAGE_PAGES;
-    // Safety: Safe to make a slice out of the guest image as it is read-only and not used by this
-    // program.
+    // Safe because all addresses pulled from the linker
+    let num_guest_image_pages: u64;
     let guest_image = unsafe {
-        core::slice::from_raw_parts(
-            guest_image_base as *const u8,
-            (PAGE_SIZE_4K * NUM_GUEST_DATA_PAGES) as usize,
-        )
+        let guestvm_bin = core::ptr::addr_of!(_guestvm_bin) as *const u8;
+        let guestvm_bin_len = core::ptr::addr_of!(_guestvm_bin_len) as usize;
+        println!("{:?}-{:?}", guestvm_bin, guestvm_bin_len); // CMS
+        num_guest_image_pages = ((guestvm_bin_len >> 12) + 1) as u64;
+        println!("{num_guest_image_pages}"); // CMS
+        core::slice::from_raw_parts::<u8>(guestvm_bin, guestvm_bin_len)
     };
     let donated_pages_base = next_page;
 
@@ -645,7 +651,7 @@ extern "C" fn kernel_init(hart_id: u64, fdt_addr: u64) {
     // Safety: The passed-in pages are unmapped and we do not access them again until they're
     // reclaimed.
     unsafe {
-        convert_pages(next_page, NUM_GUEST_DATA_PAGES);
+        convert_pages(next_page, num_guest_image_pages);
     }
     cove_host::add_measured_pages(
         vmid,
@@ -655,7 +661,7 @@ extern "C" fn kernel_init(hart_id: u64, fdt_addr: u64) {
         USABLE_RAM_START_ADDRESS,
     )
     .expect("Tellus - TvmAddMeasuredPages returned error");
-    next_page += PAGE_SIZE_4K * NUM_GUEST_DATA_PAGES;
+    next_page += PAGE_SIZE_4K * num_guest_image_pages;
 
     // Convert pages to handle confidential page faults.
     let zero_pages_base = next_page;
@@ -820,12 +826,12 @@ extern "C" fn kernel_init(hart_id: u64, fdt_addr: u64) {
                                     };
 
                                     if populated_range {
-                                        println!("Tellus - TVM range invalidation on page sharing");
-                                        cove_host::block_pages(vmid, addr, len).unwrap();
+                                        println!("Tellus - TVM range invalidation on page sharing: 0x{addr:08x}");
+                                        cove_host::block_pages(vmid, addr, len).expect("A");
                                         println!("Tellus - TVM fence on page sharing");
-                                        cove_host::tvm_initiate_fence(vmid).unwrap();
+                                        cove_host::tvm_initiate_fence(vmid).expect("B");
                                         println!("Tellus - TVM range removal on page sharing");
-                                        cove_host::remove_pages(vmid, addr, len).unwrap();
+                                        cove_host::remove_pages(vmid, addr, len).expect("c");
                                     }
                                     println!("Tellus - Set GPR A0 to 0 to indicate page sharing has been accepted");
                                     shmem.set_gpr(GprIndex::A0 as usize, 0);
@@ -1137,7 +1143,7 @@ extern "C" fn kernel_init(hart_id: u64, fdt_addr: u64) {
     reclaim_pages(huge_page_base, NUM_GUEST_ZERO_HUGE_PAGES);
     reclaim_pages(
         donated_pages_base,
-        NUM_GUEST_DATA_PAGES + NUM_CONVERTED_ZERO_PAGES,
+        num_guest_image_pages + NUM_CONVERTED_ZERO_PAGES,
     );
     reclaim_pages(state_pages_base, tvm_create_pages);
     reclaim_pages(vcpu_pages_base, tsm_info.tvm_vcpu_state_pages);

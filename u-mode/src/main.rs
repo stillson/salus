@@ -76,6 +76,7 @@ impl UmodeTask {
             .get_ref(0)
             .map_err(|_| UmodeApiError::Failed)?
             .load();
+        println!("op_get_evidence1");
         cert::get_certificate_sha384(csr, input_data, certout).map_err(|e| {
             println!("get_certificate failed: {:?}", e);
             use cert::Error::*;

@@ -5,39 +5,30 @@
 package(default_visibility = ["//visibility:public"])
 
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_clippy", "rust_library", "rustfmt_test")
-load("//:objcopy.bzl", "objcopy_to_bin")
+load("//:objcopy.bzl", "objcopy_to_bin", "objcopy_to_object")
+load("//:lds.bzl", "lds_rule")
 
 objcopy_to_bin(
-    name = "tellus_raw",
+    name = "tellus_raw_create",
     src = ":tellus",
+    out = "tellus_guestvm",
 )
 
 objcopy_to_bin(
     name = "guestvm_raw",
     src = ":guestvm",
+    out = "guestvm_raw.out",
 )
 
-rust_binary(
-    name = "create_guest_image",
-    srcs = glob(["create_guest_image/*.rs"]),
+objcopy_to_object(
+    name = "guestvm_to_object",
+    src = "guestvm_raw.out",
+    out = "guestvm.o",
 )
 
-# from salus/test-workloads/src/consts.rs
-NUM_TELLUS_IMAGE_PAGES = 512
-
-PAGE_SIZE_4K = 4096
-
-max_tellus_size = NUM_TELLUS_IMAGE_PAGES * PAGE_SIZE_4K
-
-genrule(
-    name = "tellus_guestvm_rule",
-    srcs = [
-        ":tellus_raw",
-        ":guestvm_raw",
-    ],
-    outs = ["tellus_guestvm"],
-    cmd = "$(location :create_guest_image) $(SRCS) $@ " + str(max_tellus_size),
-    tools = [":create_guest_image"],
+lds_rule(
+    name = "lds_rule",
+    template = "tellus_lds.tmpl",
 )
 
 rust_binary(
@@ -47,14 +38,15 @@ rust_binary(
         "src/consts.rs",
     ],
     crate_root = "src/bin/tellus.rs",
+    compile_data = [":guestvm_to_object", ":lds_rule"],
     data = glob([
         "src/**/*.S",
     ]),
-    linker_script = "tellus.lds",
     proc_macro_deps = ["@salus-index//:hex-literal"],
     rustc_flags = [
         "-Ctarget-feature=+v",
         "--codegen=link-arg=-nostartfiles",
+        "-Clink-arg=-T$(location :lds_rule)",
     ],
     visibility = ["//visibility:public"],
     deps = [
@@ -139,6 +131,5 @@ rustfmt_test(
         "test-workloads",
         "tellus",
         "guestvm",
-        "create_guest_image",
     ],
 )

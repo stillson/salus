@@ -43,7 +43,7 @@ SECTIONS
 
     .stack ALIGN(4096) (NOLOAD) : {
     PROVIDE(_stack_start = .);
-    . += 176*1024;
+    . += 400*1024;
     PROVIDE(_stack_end = .);
     } :stack
 

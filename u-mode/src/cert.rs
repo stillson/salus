@@ -86,17 +86,21 @@ pub fn get_certificate_sha384(
 ) -> Result<u64, Error> {
     // Copy CSR from input.
     let csr_len = csr_input.len();
+    println!("cgs1");
     if csr_len > MAX_CSR_LEN {
         return Err(Error::CsrBufferTooSmall(csr_len, MAX_CSR_LEN));
     }
     let mut csr_bytes = [0u8; MAX_CSR_LEN];
     csr_bytes[0..csr_len].copy_from_slice(csr_input);
+    println!("cgs2");
 
     let mut tcb_info_bytes = [0u8; 4096];
     let mut tcb_info = DiceTcbInfo::new();
     let hash_algorithm = const_oid::db::rfc5912::ID_SHA_384;
+    println!("cgs3");
 
     let csr = CertReq::from_der(&csr_bytes[0..csr_len]).map_err(Error::CsrParseFailed)?;
+    println!("cgs4");
 
     println!(
         "U-mode CSR version {:?} Signature algorithm {:?}",
@@ -105,16 +109,21 @@ pub fn get_certificate_sha384(
 
     csr.verify().map_err(Error::CsrVerificationFailed)?;
 
+    println!("cgs5");
+
     for m in evidence.msmt_regs.iter() {
         tcb_info
             .add_fwid::<sha2::Sha384>(hash_algorithm, GenericArray::from_slice(m.as_slice()))
             .map_err(Error::FwidAddFailed)?;
     }
+    println!("cgs6");
+
 
     let tcb_info_extn = tcb_info
         .to_extension(&mut tcb_info_bytes)
         .map_err(Error::TcbInfoFailed)?;
     let extensions: [&[u8]; 1] = [tcb_info_extn];
+    println!("cgs7");
 
     let layer: Layer<PUBLIC_KEY_LENGTH, Signature, UmodeCdi, sha2::Sha384> =
         Layer::new(ATTESTATION_CURRENT_CDI, Some(ATTESTATION_NEXT_CDI));
@@ -128,6 +137,8 @@ pub fn get_certificate_sha384(
             cert_der_len,
         ));
     }
+    println!("cgs8");
+
     // Copy cert to output.
     cert_output[0..cert_der_len].copy_from_slice(&cert_der);
     Ok(cert_der_len as u64)

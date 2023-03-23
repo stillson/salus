@@ -48,7 +48,7 @@ objcopy_to_object = rule(
 def _objcopy_to_bin_impl(ctx):
     cc_toolchain = find_cpp_toolchain(ctx)
     src = ctx.files.src[0]
-    out = ctx.actions.declare_file(ctx.label.name + ".out")
+    out = ctx.outputs.out
 
     command_line = ["-O", "binary", src.path, out.path]
 
@@ -77,6 +77,7 @@ objcopy_to_bin = rule(
         "_cc_toolchain": attr.label(
             default = Label("@bazel_tools//tools/cpp:current_cc_toolchain"),
         ),
+        "out": attr.output(),
     },
     toolchains = use_cpp_toolchain(),
 )
